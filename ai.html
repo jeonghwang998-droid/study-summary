@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>스마트 학습 요약 노트 | AI Study Summarizer</title>
+    
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter & Noto Sans KR -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <!-- PDF.js for reading PDF files in browser -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', 'Noto Sans KR', sans-serif;
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(229, 231, 235, 0.8);
+        }
+        .dark .glass-panel {
+            background: rgba(30, 41, 59, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(51, 65, 85, 0.8);
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 9999px;
+        }
+        .dark ::-webkit-scrollbar-thumb {
+            background: #475569;
+        }
+        @keyframes pulse-subtle {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        .animate-pulse-subtle {
+            animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+    </style>
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 min-h-screen flex flex-col transition-colors duration-200">
+
+    <!-- Header -->
+    <header class="sticky top-0 z-40 w-full glass-panel border-b shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+                    <i class="fa-solid fa-graduation-cap text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg leading-tight tracking-tight">AI 학습 요약 노트</h1>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">학생을 위한 스마트 핵심 요약기</p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-2 sm:space-x-3">
+                <!-- API Key Status Indicator / Button -->
+                <button id="apiKeyModalBtn" onclick="openApiKeyModal()" class="flex items-center space-x-2 px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition">
+                    <span id="apiStatusDot" class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                    <span id="apiStatusText" class="hidden sm:inline">API 키 설정</span>
+                    <i class="fa-solid fa-key text-slate-400 text-xs"></i>
+                </button>
+
+                <!-- Dark Mode Toggle -->
+                <button id="themeToggleBtn" onclick="toggleDarkMode()" class="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition">
+                    <i id="themeIcon" class="fa-solid fa-moon"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Toast Notification Container -->
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+    <!-- Main Content -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Left Panel: Input Section (7 cols on LG) -->
+        <section class="lg:col-span-7 flex flex-col space-y-5">
+            
+            <!-- Input Card -->
+            <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-200/80 dark:border-slate-700 flex flex-col flex-1">
+                
+                <!-- Tab Switching Buttons -->
+                <div class="flex border-b border-slate-200 dark:border-slate-700 mb-4 pb-1">
+                    <button id="tabTextBtn" onclick="switchTab('text')" class="flex items-center space-x-2 pb-2.5 px-4 font-semibold text-sm border-b-2 border-brand-600 text-brand-600 dark:text-brand-400 transition">
+                        <i class="fa-solid fa-pen-to-square"></i>
+                        <span>텍스트 직접 입력</span>
+                    </button>
+                    <button id="tabFileBtn" onclick="switchTab('file')" class="flex items-center space-x-2 pb-2.5 px-4 font-medium text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 border-b-2 border-transparent transition">
+                        <i class="fa-solid fa-file-arrow-up"></i>
+                        <span>파일 업로드 (PDF / TXT)</span>
+                    </button>
+                </div>
+
+                <!-- Tab 1: Text Input -->
+                <div id="tabTextContent" class="flex-1 flex flex-col space-y-3">
+                    <textarea id="studyTextInput" placeholder="요약하고 싶은 수업 노트, 논문, 아티클, 기사 등의 내용을 여기에 붙여넣으세요..." class="w-full flex-1 min-h-[220px] p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50 resize-y transition"></textarea>
+                    <div class="flex justify-between items-center text-xs text-slate-400 px-1">
+                        <span id="charCounter">0 글자 입력됨</span>
+                        <button onclick="clearInputText()" class="hover:text-slate-600 dark:hover:text-slate-200 transition">
+                            <i class="fa-solid fa-rotate-left mr-1"></i>지우기
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Tab 2: File Upload Input -->
+                <div id="tabFileContent" class="hidden flex-1 flex flex-col justify-center">
+                    <div id="dropZone" onclick="document.getElementById('fileInput').click()" class="border-2 border-dashed border-slate-300 dark:border-slate-600 hover:border-brand-500 dark:hover:border-brand-400 rounded-2xl p-8 text-center cursor-pointer bg-slate-50 dark:bg-slate-900/30 hover:bg-brand-50/30 dark:hover:bg-brand-950/20 transition group">
+                        <input type="file" id="fileInput" onchange="handleFileSelect(event)" accept=".txt,.pdf,.md,.docx" class="hidden">
+                        <div class="w-14 h-14 mx-auto mb-3 rounded-full bg-brand-100 dark:bg-brand-900/50 text-brand-600 dark:text-brand-400 flex items-center justify-center group-hover:scale-110 transition duration-200">
+                            <i class="fa-solid fa-cloud-arrow-up text-2xl"></i>
+                        </div>
+                        <p class="font-medium text-sm text-slate-700 dark:text-slate-200 mb-1">파일을 클릭하거나 여기로 드래그하세요</p>
+                        <p class="text-xs text-slate-400">지원 형식: TXT, PDF, MD (최대 10MB)</p>
+                    </div>
+
+                    <!-- Selected File Info Box -->
+                    <div id="fileStatusBox" class="hidden mt-4 p-3 rounded-xl bg-brand-50 dark:bg-brand-950/40 border border-brand-200 dark:border-brand-800 flex items-center justify-between">
+                        <div class="flex items-center space-x-3 overflow-hidden">
+                            <i class="fa-solid fa-file-lines text-brand-600 dark:text-brand-400 text-lg"></i>
+                            <div class="truncate">
+                                <p id="fileNameDisplay" class="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">document.pdf</p>
+                                <p id="fileSizeDisplay" class="text-[10px] text-slate-500">2.4 MB</p>
+                            </div>
+                        </div>
+                        <button onclick="removeSelectedFile()" class="p-1.5 text-slate-400 hover:text-red-500 rounded-lg transition">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Option Controls -->
+                <div class="mt-5 pt-4 border-t border-slate-100 dark:border-slate-700/60 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">
+                            <i class="fa-solid fa-sliders mr-1"></i>요약 유형 선택
+                        </label>
+                        <select id="summaryTypeSelect" class="w-full p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium focus:ring-2 focus:ring-brand-500/50">
+                            <option value="summary_3line">⚡ 핵심 3줄 요약 + 상세 정리</option>
+                            <option value="key_concepts">🔑 핵심 개념 & 용어 정의</option>
+                            <option value="quiz_flashcards">❓ 복습용 퀴즈 & 플래시카드</option>
+                            <option value="bullet_study_guide">📚 시험 대비 요점 정리 노트</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">
+                            <i class="fa-solid fa-layer-group mr-1"></i>난이도 / 타겟 설정
+                        </label>
+                        <select id="targetAudienceSelect" class="w-full p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium focus:ring-2 focus:ring-brand-500/50">
+                            <option value="highschool">중·고등학생 수준 (쉬운 설명 & 예시)</option>
+                            <option value="university" selected>대학생 / 일반 수준 (전문 용어 포함)</option>
+                            <option value="quick">초고속 개요 (핵심만 빠르게)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Generate Action Button -->
+                <button id="generateBtn" onclick="runSummarizeProcess()" class="mt-5 w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-700 hover:to-indigo-700 text-white font-semibold text-sm shadow-md shadow-brand-500/25 flex items-center justify-center space-x-2 transition transform active:scale-[0.99]">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                    <span>AI 핵심 요약 생성하기</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- Right Panel: Output & Results Section (5 cols on LG) -->
+        <section class="lg:col-span-5 flex flex-col space-y-5">
+            
+            <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-200/80 dark:border-slate-700 flex flex-col flex-1 min-h-[400px]">
+                
+                <!-- Output Header -->
+                <div class="flex items-center justify-between pb-3 mb-3 border-b border-slate-100 dark:border-slate-700">
+                    <div class="flex items-center space-x-2">
+                        <i class="fa-solid fa-square-poll-vertical text-brand-600 dark:text-brand-400"></i>
+                        <h2 class="font-bold text-sm">요약 결과</h2>
+                    </div>
+
+                    <!-- Action toolbar -->
+                    <div id="outputActions" class="hidden flex items-center space-x-1">
+                        <button onclick="speakOutputText()" title="음성으로 읽기" class="p-1.5 text-slate-500 hover:text-brand-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-xs transition">
+                            <i class="fa-solid fa-volume-high"></i>
+                        </button>
+                        <button onclick="copyOutputToClipboard()" title="복사하기" class="p-1.5 text-slate-500 hover:text-brand-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-xs transition">
+                            <i class="fa-regular fa-copy"></i>
+                        </button>
+                        <button onclick="downloadAsTxt()" title="TXT 다운로드" class="p-1.5 text-slate-500 hover:text-brand-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-xs transition">
+                            <i class="fa-solid fa-download"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Empty State View -->
+                <div id="outputEmptyState" class="flex-1 flex flex-col items-center justify-center text-center p-6 text-slate-400">
+                    <div class="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-900 flex items-center justify-center mb-3">
+                        <i class="fa-regular fa-lightbulb text-2xl text-slate-300 dark:text-slate-600"></i>
+                    </div>
+                    <p class="text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">아직 생성된 요약이 없습니다</p>
+                    <p class="text-xs text-slate-400 max-w-xs">왼쪽 창에 학습할 자료를 입력하거나 파일(PDF/TXT)을 올린 후 생성하기 버튼을 눌러주세요.</p>
+                </div>
+
+                <!-- Loading Spinner View -->
+                <div id="outputLoadingState" class="hidden flex-1 flex flex-col items-center justify-center text-center p-6">
+                    <div class="relative w-12 h-12 mb-4">
+                        <div class="absolute inset-0 rounded-full border-4 border-brand-200 dark:border-brand-900"></div>
+                        <div class="absolute inset-0 rounded-full border-4 border-brand-600 border-t-transparent animate-spin"></div>
+                    </div>
+                    <p id="loadingStatusText" class="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1">AI가 중요한 내용을 분석하는 중...</p>
+                    <p class="text-xs text-slate-400 animate-pulse-subtle">잠시만 기다려 주세요 (약 3~5초 소요)</p>
+                </div>
+
+                <!-- Result Display Content View -->
+                <div id="outputResultState" class="hidden flex-1 overflow-y-auto max-h-[520px] pr-1">
+                    <div id="summaryResultContent" class="text-xs sm:text-sm text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-line space-y-3">
+                        <!-- Content injected via JS -->
+                    </div>
+
+                    <!-- Grounding / Attribution Sources (If available) -->
+                    <div id="sourcesContainer" class="hidden mt-4 pt-3 border-t border-slate-100 dark:border-slate-700">
+                        <p class="text-[11px] font-semibold text-slate-400 mb-1">참고 출처:</p>
+                        <ul id="sourcesList" class="text-[11px] text-brand-600 dark:text-brand-400 space-y-0.5"></ul>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Recent History Quick Bar -->
+            <div class="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-slate-200/80 dark:border-slate-700">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-bold text-slate-600 dark:text-slate-300">
+                        <i class="fa-solid fa-clock-rotate-left mr-1"></i>최근 요약 기록
+                    </span>
+                    <button onclick="clearHistory()" class="text-[11px] text-slate-400 hover:text-red-500 transition">기록 삭제</button>
+                </div>
+                <div id="historyList" class="flex flex-wrap gap-1.5 text-xs">
+                    <span class="text-xs text-slate-400 py-1">최근 생성 내역이 없습니다.</span>
+                </div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- API Key Configuration Modal -->
+    <div id="apiKeyModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm hidden">
+        <div class="bg-white dark:bg-slate-800 rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200 dark:border-slate-700 relative animate-in fade-in zoom-in duration-150">
+            
+            <button onclick="closeApiKeyModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+
+            <div class="flex items-center space-x-3 mb-4">
+                <div class="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+                    <i class="fa-solid fa-key text-lg"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-base">Gemini API 키 설정</h3>
+                    <p class="text-xs text-slate-500">깃허브 공유용 무오류 클라이언트 저장 방식</p>
+                </div>
+            </div>
+
+            <p class="text-xs text-slate-600 dark:text-slate-300 mb-4 leading-relaxed">
+                Google Gemini API 키를 등록하면 본인의 사용량 한도로 무제한 요약 기능을 이용할 수 있습니다. 키는 서버로 전송되지 않고 <strong>사용자의 웹 브라우저에만 저장</strong>됩니다.
+            </p>
+
+            <div class="space-y-3 mb-5">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Gemini API Key</label>
+                    <input type="password" id="apiKeyInput" placeholder="AIzaSy..." class="w-full p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs focus:ring-2 focus:ring-brand-500/50">
+                </div>
+
+                <div class="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-300 flex items-start space-x-2">
+                    <i class="fa-solid fa-circle-info mt-0.5"></i>
+                    <div>
+                        API 키가 없으신가요? 
+                        <a href="https://aistudio.google.com/app/apikey" target="_blank" class="underline font-bold hover:text-amber-900 dark:hover:text-amber-100">Google AI Studio</a>에서 1분 만에 무료발급 받으실 수 있습니다.
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700">
+                <button onclick="useMockMode()" class="px-3 py-2 text-xs font-medium text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 underline">
+                    시연(Mock) 모드로 테스트
+                </button>
+                
+                <div class="flex space-x-2">
+                    <button onclick="closeApiKeyModal()" class="px-4 py-2 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700">
+                        취소
+                    </button>
+                    <button onclick="saveApiKey()" class="px-4 py-2 rounded-lg text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white shadow-sm">
+                        저장하기
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // Configure PDF.js worker
+        if (window.pdfjsLib) {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        }
+
+        // Global State Variables
+        let activeTab = 'text'; // 'text' or 'file'
+        let selectedFile = null;
+        let extractedFileText = '';
+        let currentSummaryText = '';
+        let historyItems = [];
+        let isMockMode = false;
+
+        // Initialize App on DOM Loaded
+        window.addEventListener('DOMContentLoaded', () => {
+            initTheme();
+            checkApiKeyStatus();
+            loadHistoryFromStorage();
+            setupTextCounter();
+        });
+
+        // Theme Toggle Functionality
+        function initTheme() {
+            if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
+                document.getElementById('themeIcon').className = 'fa-solid fa-sun';
+            } else {
+                document.documentElement.classList.remove('dark');
+                document.getElementById('themeIcon').className = 'fa-solid fa-moon';
+            }
+        }
+
+        function toggleDarkMode() {
+            if (document.documentElement.classList.contains('dark')) {
+                document.documentElement.classList.remove('dark');
+                localStorage.setItem('theme', 'light');
+                document.getElementById('themeIcon').className = 'fa-solid fa-moon';
+            } else {
+                document.documentElement.classList.add('dark');
+                localStorage.setItem('theme', 'dark');
+                document.getElementById('themeIcon').className = 'fa-solid fa-sun';
+            }
+        }
+
+        // API Key Management Logic
+        function checkApiKeyStatus() {
+            const storedKey = localStorage.getItem('gemini_api_key');
+            const dot = document.getElementById('apiStatusDot');
+            const statusText = document.getElementById('apiStatusText');
+
+            if (storedKey && storedKey.trim() !== '') {
+                dot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50';
+                statusText.innerText = 'API 키 연동됨';
+                isMockMode = false;
+            } else if (isMockMode) {
+                dot.className = 'w-2.5 h-2.5 rounded-full bg-blue-500';
+                statusText.innerText = '시연(Mock) 모드';
+            } else {
+                dot.className = 'w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse';
+                statusText.innerText = 'API 키 미설정';
+            }
+        }
+
+        function openApiKeyModal() {
+            const storedKey = localStorage.getItem('gemini_api_key') || '';
+            document.getElementById('apiKeyInput').value = storedKey;
+            document.getElementById('apiKeyModal').classList.remove('hidden');
+        }
+
+        function closeApiKeyModal() {
+            document.getElementById('apiKeyModal').classList.add('hidden');
+        }
+
+        function saveApiKey() {
+            const keyInput = document.getElementById('apiKeyInput').value.trim();
+            if (keyInput) {
+                localStorage.setItem('gemini_api_key', keyInput);
+                isMockMode = false;
+                showToast('API 키가 성공적으로 저장되었습니다.', 'success');
+            } else {
+                localStorage.removeItem('gemini_api_key');
+                showToast('API 키가 제거되었습니다.', 'info');
+            }
+            checkApiKeyStatus();
+            closeApiKeyModal();
+        }
+
+        function useMockMode() {
+            isMockMode = true;
+            checkApiKeyStatus();
+            closeApiKeyModal();
+            showToast('시연(Mock) 모드로 전환되었습니다. API 키 없이 체험할 수 있습니다.', 'info');
+        }
+
+        // UI Navigation & Tabs
+        function switchTab(tab) {
+            activeTab = tab;
+            const textBtn = document.getElementById('tabTextBtn');
+            const fileBtn = document.getElementById('tabFileBtn');
+            const textContent = document.getElementById('tabTextContent');
+            const fileContent = document.getElementById('tabFileContent');
+
+            if (tab === 'text') {
+                textBtn.className = 'flex items-center space-x-2 pb-2.5 px-4 font-semibold text-sm border-b-2 border-brand-600 text-brand-600 dark:text-brand-400 transition';
+                fileBtn.className = 'flex items-center space-x-2 pb-2.5 px-4 font-medium text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 border-b-2 border-transparent transition';
+                textContent.classList.remove('hidden');
+                fileContent.classList.add('hidden');
+            } else {
+                fileBtn.className = 'flex items-center space-x-2 pb-2.5 px-4 font-semibold text-sm border-b-2 border-brand-600 text-brand-600 dark:text-brand-400 transition';
+                textBtn.className = 'flex items-center space-x-2 pb-2.5 px-4 font-medium text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 border-b-2 border-transparent transition';
+                fileContent.classList.remove('hidden');
+                textContent.classList.add('hidden');
+            }
+        }
+
+        function setupTextCounter() {
+            const textarea = document.getElementById('studyTextInput');
+            const counter = document.getElementById('charCounter');
+            textarea.addEventListener('input', () => {
+                counter.innerText = `${textarea.value.length.toLocaleString()} 글자 입력됨`;
+            });
+        }
+
+        function clearInputText() {
+            document.getElementById('studyTextInput').value = '';
+            document.getElementById('charCounter').innerText = '0 글자 입력됨';
+        }
+
+        // File Reader Functions
+        async function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            selectedFile = file;
+            document.getElementById('fileNameDisplay').innerText = file.name;
+            document.getElementById('fileSizeDisplay').innerText = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
+            document.getElementById('fileStatusBox').classList.remove('hidden');
+
+            try {
+                if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+                    extractedFileText = await parsePdfFile(file);
+                } else {
+                    extractedFileText = await parseTextFile(file);
+                }
+                showToast(`'${file.name}' 파일을 읽었습니다.`, 'success');
+            } catch (error) {
+                console.error(error);
+                showToast('파일을 읽는 도중 오류가 발생했습니다.', 'error');
+            }
+        }
+
+        function parseTextFile(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => resolve(e.target.result);
+                reader.onerror = (e) => reject(e);
+                reader.readAsText(file);
+            });
+        }
+
+        async function parsePdfFile(file) {
+            if (!window.pdfjsLib) {
+                throw new Error('PDF.js 라이브러리가 로드되지 않았습니다.');
+            }
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            let fullText = '';
+
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                const pageText = textContent.items.map(item => item.str).join(' ');
+                fullText += `--- Page ${i} ---\n` + pageText + '\n\n';
+            }
+            return fullText;
+        }
+
+        function removeSelectedFile() {
+            selectedFile = null;
+            extractedFileText = '';
+            document.getElementById('fileInput').value = '';
+            document.getElementById('fileStatusBox').classList.add('hidden');
+        }
+
+        // Main Summarize Process Orchestrator
+        async function runSummarizeProcess() {
+            let textToSummarize = '';
+
+            if (activeTab === 'text') {
+                textToSummarize = document.getElementById('studyTextInput').value.trim();
+            } else {
+                textToSummarize = extractedFileText.trim();
+            }
+
+            if (!textToSummarize) {
+                showToast('요약할 텍스트를 입력하거나 파일을 올려주세요.', 'info');
+                return;
+            }
+
+            const apiKey = localStorage.getItem('gemini_api_key');
+            if (!apiKey && !isMockMode) {
+                openApiKeyModal();
+                showToast('API 키를 등록하거나 시연(Mock) 모드를 선택해 주세요.', 'info');
+                return;
+            }
+
+            // Show Loading State
+            setUIState('loading');
+
+            const summaryType = document.getElementById('summaryTypeSelect').value;
+            const targetAudience = document.getElementById('targetAudienceSelect').value;
+
+            try {
+                let resultText = '';
+                let sources = [];
+
+                if (isMockMode || !apiKey) {
+                    // Simulate AI Response Delay for Mock Mode
+                    await new Promise(resolve => setTimeout(resolve, 1500));
+                    resultText = generateMockSummary(textToSummarize, summaryType);
+                } else {
+                    // Call Google Gemini API
+                    const apiData = await callGeminiApi(textToSummarize, summaryType, targetAudience, apiKey);
+                    resultText = apiData.text;
+                    sources = apiData.sources || [];
+                }
+
+                currentSummaryText = resultText;
+                displaySummaryResult(resultText, sources);
+                saveToHistory(textToSummarize.substring(0, 30) + '...', resultText);
+                setUIState('result');
+                showToast('요약이 완료되었습니다!', 'success');
+
+            } catch (error) {
+                console.error('API Error:', error);
+                setUIState('empty');
+                showToast(`오류가 발생했습니다: ${error.message || 'API 요청 실패'}`, 'error');
+            }
+        }
+
+        // Gemini API Fetch Function with Exponential Backoff
+        async function callGeminiApi(text, summaryType, audience, apiKey) {
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+            const systemInstruction = `당신은 학생들을 위한 전문 교육용 AI 튜터이자 요약 전문가입니다. 
+제공된 학습 자료를 정확하게 분석하여 학생이 이해하기 쉽고 명확하게 한국어로 정리하세요.
+markdown 형식을 사용하여 중요 가독성을 높이세요 (bold, bullet points 등 사용).`;
+
+            let promptInstruction = '';
+            if (summaryType === 'summary_3line') {
+                promptInstruction = '다음 학습 자료를 읽고 가장 중요한 핵심 내용을 3줄로 요약한 후, 이어서 주요 내용을 파트별로 상세히 정리해 주세요.';
+            } else if (summaryType === 'key_concepts') {
+                promptInstruction = '다음 학습 자료에서 등장하는 핵심 개념, 용어, 법칙들을 뽑아서 [용어 : 설명] 형태로 일목요연하게 정리해 주세요.';
+            } else if (summaryType === 'quiz_flashcards') {
+                promptInstruction = '다음 학습 자료를 바탕으로 복습할 수 있는 시험 예상 문제 5개와 각 문제의 정답 및 해설을 만들어 주세요.';
+            } else {
+                promptInstruction = '다음 학습 자료를 바탕으로 시험 직전에 빠르게 볼 수 있는 요점 정리 노트를 파트별 구분선과 함께 구조화하여 작성해 주세요.';
+            }
+
+            promptInstruction += ` (대상 난이도: ${audience})`;
+
+            const payload = {
+                contents: [{
+                    parts: [{
+                        text: `${promptInstruction}\n\n[학습 자료 내용]:\n${text}`
+                    }]
+                }],
+                systemInstruction: {
+                    parts: [{ text: systemInstruction }]
+                }
+            };
+
+            // Fetch with exponential backoff
+            let retries = 3;
+            let delay = 1000;
+
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        const errJson = await response.json().catch(() => ({}));
+                        throw new Error(errJson.error?.message || `HTTP 에러 status ${response.status}`);
+                    }
+
+                    const result = await response.json();
+                    const candidate = result.candidates?.[0];
+
+                    if (candidate && candidate.content?.parts?.[0]?.text) {
+                        const textOutput = candidate.content.parts[0].text;
+                        
+                        // Extract grounding attributions if present
+                        let sources = [];
+                        const groundingMetadata = candidate.groundingMetadata;
+                        if (groundingMetadata && groundingMetadata.groundingAttributions) {
+                            sources = groundingMetadata.groundingAttributions
+                                .map(attr => ({ uri: attr.web?.uri, title: attr.web?.title }))
+                                .filter(s => s.uri && s.title);
+                        }
+
+                        return { text: textOutput, sources: sources };
+                    } else {
+                        throw new Error('응답 형식에 텍스트 데이터가 없습니다.');
+                    }
+
+                } catch (err) {
+                    if (i === retries - 1) throw err;
+                    await new Promise(res => setTimeout(res, delay));
+                    delay *= 2;
+                }
+            }
+        }
+
+        // Fallback Mock Generator for keyless test mode
+        function generateMockSummary(inputText, summaryType) {
+            const preview = inputText.substring(0, 40) + '...';
+            
+            if (summaryType === 'summary_3line') {
+                return `📌 **핵심 3줄 요약**
+1. 입력하신 학습 자료의 핵심 주제는 '${preview}'에 관한 내용입니다.
+2. 주요 원리와 관련하여 지식 구조를 이해하는 것이 중요합니다.
+3. 실제 사례와 개념 적용 문제를 통해 복습하는 것을 권장합니다.
+
+---
+
+📖 **상세 파트별 요약 노트**
+• **개념 이해**: 학습 데이터의 주요 정의 및 배경 설명이 포함되어 있습니다.
+• **핵심 포인트**: 시험에 자주 출제되는 핵심 공식/이론 단락입니다.
+• **결론**: 전체 내용의 최종 종합 정리입니다.`;
+            } else if (summaryType === 'quiz_flashcards') {
+                return `❓ **복습용 예상 문제 & 퀴즈**
+
+**Q1. 본 학습 자료에서 다루는 가장 중요한 핵심 용어는 무엇인가요?**
+👉 **정답**: 자료 상단의 기본 정의 개념입니다.
+💡 **해설**: 문제 풀이 시 가장 먼저 파악해야 할 기초 개념입니다.
+
+**Q2. 주요 원리의 작동 방식 3가지는 무엇인가요?**
+👉 **정답**: 1단계 분석, 2단계 적용, 3단계 평가입니다.`;
+            } else {
+                return `📚 **시험 대비 핵심 요점 정리**
+
+• **주요 키워드**: [핵심 개념 A], [핵심 이론 B], [주요 법칙 C]
+• **핵심 내용**: 입력하신 자료 기반으로 추출된 시연 요약입니다. Gemini API 키를 저장하시면 실제 AI 연동 결과를 경험하실 수 있습니다.`;
+            }
+        }
+
+        // Display Function with Simple Markdown Parsing
+        function displaySummaryResult(text, sources) {
+            const container = document.getElementById('summaryResultContent');
+            
+            // Format basic markdown: **bold**, lines, bullet points
+            let formattedHtml = text
+                .replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-slate-900 dark:text-white">$1</strong>')
+                .replace(/^---$/gm, '<hr class="my-3 border-slate-200 dark:border-slate-700">')
+                .replace(/^• (.*$)/gm, '<li class="ml-4 list-disc">$1</li>')
+                .replace(/^(\d+)\. (.*$)/gm, '<li class="ml-4 list-decimal font-medium">$2</li>');
+
+            container.innerHTML = formattedHtml;
+
+            // Sources processing
+            const sourcesContainer = document.getElementById('sourcesContainer');
+            const sourcesList = document.getElementById('sourcesList');
+            sourcesList.innerHTML = '';
+
+            if (sources && sources.length > 0) {
+                sources.forEach(src => {
+                    const li = document.createElement('li');
+                    li.innerHTML = `<a href="${src.uri}" target="_blank" class="hover:underline flex items-center space-x-1">
+                        <i class="fa-solid fa-link text-[9px]"></i>
+                        <span>${src.title}</span>
+                    </a>`;
+                    sourcesList.appendChild(li);
+                });
+                sourcesContainer.classList.remove('hidden');
+            } else {
+                sourcesContainer.classList.add('hidden');
+            }
+        }
+
+        // State Manager Helper
+        function setUIState(state) {
+            const empty = document.getElementById('outputEmptyState');
+            const loading = document.getElementById('outputLoadingState');
+            const result = document.getElementById('outputResultState');
+            const actions = document.getElementById('outputActions');
+
+            empty.classList.add('hidden');
+            loading.classList.add('hidden');
+            result.classList.add('hidden');
+            actions.classList.add('hidden');
+
+            if (state === 'empty') {
+                empty.classList.remove('hidden');
+            } else if (state === 'loading') {
+                loading.classList.remove('hidden');
+            } else if (state === 'result') {
+                result.classList.remove('hidden');
+                actions.classList.remove('hidden');
+            }
+        }
+
+        // Utility Functions
+        function copyOutputToClipboard() {
+            if (!currentSummaryText) return;
+            
+            const textarea = document.createElement('textarea');
+            textarea.value = currentSummaryText;
+            document.body.appendChild(textarea);
+            textarea.select();
+            
+            try {
+                document.execCommand('copy');
+                showToast('요약 내용이 클립보드에 복사되었습니다.', 'success');
+            } catch (err) {
+                showToast('복사에 실패했습니다.', 'error');
+            } finally {
+                document.body.removeChild(textarea);
+            }
+        }
+
+        function downloadAsTxt() {
+            if (!currentSummaryText) return;
+            const blob = new Blob([currentSummaryText], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `학습요약노트_${new Date().toISOString().slice(0,10)}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('TXT 파일로 다운로드되었습니다.', 'success');
+        }
+
+        function speakOutputText() {
+            if (!currentSummaryText) return;
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel(); // Reset active audio
+                const cleanText = currentSummaryText.replace(/[*#]/g, '');
+                const utterance = new SpeechSynthesisUtterance(cleanText);
+                utterance.lang = 'ko-KR';
+                utterance.rate = 1.0;
+                window.speechSynthesis.speak(utterance);
+                showToast('음성 읽기를 시작합니다.', 'info');
+            } else {
+                showToast('이 브라우저는 음성합성(TTS)을 지원하지 않습니다.', 'info');
+            }
+        }
+
+        // History Storage Logic
+        function saveToHistory(title, summary) {
+            historyItems.unshift({ title, summary, date: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) });
+            if (historyItems.length > 5) historyItems.pop();
+            localStorage.setItem('summary_history', JSON.stringify(historyItems));
+            renderHistoryUI();
+        }
+
+        function loadHistoryFromStorage() {
+            const saved = localStorage.getItem('summary_history');
+            if (saved) {
+                try {
+                    historyItems = JSON.parse(saved);
+                    renderHistoryUI();
+                } catch (e) { historyItems = []; }
+            }
+        }
+
+        function renderHistoryUI() {
+            const container = document.getElementById('historyList');
+            if (historyItems.length === 0) {
+                container.innerHTML = '<span class="text-xs text-slate-400 py-1">최근 생성 내역이 없습니다.</span>';
+                return;
+            }
+            container.innerHTML = '';
+            historyItems.forEach((item, idx) => {
+                const badge = document.createElement('button');
+                badge.className = 'px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 transition text-[11px] truncate max-w-[140px]';
+                badge.innerText = `${item.date} ${item.title}`;
+                badge.onclick = () => {
+                    currentSummaryText = item.summary;
+                    displaySummaryResult(item.summary, []);
+                    setUIState('result');
+                };
+                container.appendChild(badge);
+            });
+        }
+
+        function clearHistory() {
+            historyItems = [];
+            localStorage.removeItem('summary_history');
+            renderHistoryUI();
+            showToast('히스토리가 삭제되었습니다.', 'info');
+        }
+
+        // Toast Notification System
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            
+            let bgClass = 'bg-slate-800 text-white';
+            let icon = 'fa-circle-info text-blue-400';
+            
+            if (type === 'success') {
+                bgClass = 'bg-slate-900 text-white';
+                icon = 'fa-circle-check text-emerald-400';
+            } else if (type === 'error') {
+                bgClass = 'bg-red-900 text-white';
+                icon = 'fa-triangle-exclamation text-red-300';
+            }
+
+            toast.className = `${bgClass} pointer-events-auto px-4 py-3 rounded-xl shadow-lg border border-slate-700/50 flex items-center space-x-3 text-xs animate-in slide-in-from-bottom duration-200`;
+            toast.innerHTML = `<i class="fa-solid ${icon} text-sm"></i><span>${message}</span>`;
+            
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'transition', 'duration-300');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
